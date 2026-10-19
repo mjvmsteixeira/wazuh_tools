@@ -175,13 +175,16 @@ cp -a "${SEC_DIR_HOST}/." "${TMP_SEC_HOST}/"
 cp -a "${INTERNAL_USERS_HOST}" "${TMP_SEC_HOST}/internal_users.yml"
 TMP_SEC_IN_CTN="/tmp/sec-$(date +%s)"
 
+# In Wazuh 4.14.8 the opensearch-security directory is under the plugins directory inside the #INSTALLATION_DIR
+
 docker exec -u 0 -i "${INDEXER_CTN}" bash -lc '
 set -e
 INSTALLATION_DIR=/usr/share/wazuh-indexer
-SEC_DIR=$INSTALLATION_DIR/opensearch-security
+#SEC_DIR=$INSTALLATION_DIR/plugins/opensearch-security
+SEC_DIR=$INSTALLATION_DIR/config/opensearch-security
 TMP_DIR="'"${TMP_SEC_IN_CTN}"'"
 mkdir -p "$TMP_DIR"
-cp -a "$SEC_DIR/"* "$TMP_DIR"/
+cp -a "$SEC_DIR"/* "$TMP_DIR"/
 echo "Full copy at $TMP_DIR"
 '
 
@@ -189,14 +192,16 @@ echo "Full copy at $TMP_DIR"
 docker cp "${TMP_SEC_HOST}/internal_users.yml" "${INDEXER_CTN}:${TMP_SEC_IN_CTN}/internal_users.yml"
 
 # --------- Apply securityadmin.sh (using full TMP) ----------
+# In wazuh 4.14.8 the file opensearch.yml is located under the config directory inside $INSTALLATION_DIR
+
 docker exec -u 0 -i "${INDEXER_CTN}" bash -lc '
 set -e
 export INSTALLATION_DIR=/usr/share/wazuh-indexer
-CACERT=$INSTALLATION_DIR/certs/root-ca.pem
-KEY=$INSTALLATION_DIR/certs/admin-key.pem
-CERT=$INSTALLATION_DIR/certs/admin.pem
+CACERT=$INSTALLATION_DIR/config/certs/root-ca.pem
+KEY=$INSTALLATION_DIR/config/certs/admin-key.pem
+CERT=$INSTALLATION_DIR/config/certs/admin.pem
 export JAVA_HOME=/usr/share/wazuh-indexer/jdk
-HOST=$(awk -F": *" "/^node\.name:/ {print \$2; exit}" $INSTALLATION_DIR/opensearch.yml)
+HOST=$(awk -F": *" "/^node\.name:/ {print \$2; exit}" $INSTALLATION_DIR/config/opensearch.yml)
 
 bash /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh \
   -cd "'"${TMP_SEC_IN_CTN}"'" -nhnv -cacert $CACERT -cert $CERT -key $KEY -p 9200 -icl -h $HOST
@@ -207,7 +212,7 @@ if [[ -n "${OLD_PASSWORD}" ]]; then
   echo "Verification (via node HOST) with new and old password..."
   docker exec -i "${INDEXER_CTN}" bash -lc "
     set -e
-    HOST=\$(grep '^node.name' /usr/share/wazuh-indexer/opensearch.yml | awk '{print \$2}')
+    HOST=\$(grep '^node.name' /usr/share/wazuh-indexer/config/opensearch.yml | awk '{print \$2}')
     echo -n 'New Password Test:   '; curl -ks -u ${USER_TO_CHANGE}:'${NEW_PASSWORD}' https://\$HOST:9200 -o /dev/null -w '%{http_code}\n' || true
     echo -n 'Old Password Test:   '; curl -ks -u ${USER_TO_CHANGE}:'${OLD_PASSWORD}' https://\$HOST:9200 -o /dev/null -w '%{http_code}\n' || true
   "
@@ -215,7 +220,7 @@ else
   echo "Verification (via node HOST) with new password..."
   docker exec -i "${INDEXER_CTN}" bash -lc "
     set -e
-    HOST=\$(grep '^node.name' /usr/share/wazuh-indexer/opensearch.yml | awk '{print \$2}')
+    HOST=\$(grep '^node.name' /usr/share/wazuh-indexer/config/opensearch.yml | awk '{print \$2}')
     echo -n 'New Password Test:   '; curl -ks -u ${USER_TO_CHANGE}:'${NEW_PASSWORD}' https://\$HOST:9200 -o /dev/null -w '%{http_code}\n' || true
   "
 fi
